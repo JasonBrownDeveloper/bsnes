@@ -1,4 +1,4 @@
-target := bsnes
+target := csnes
 binary := application
 build := performance
 openmp := true
