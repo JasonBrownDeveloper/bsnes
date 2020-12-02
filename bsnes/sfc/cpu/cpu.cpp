@@ -34,6 +34,7 @@ auto CPU::Enter() -> void {
 auto CPU::main() -> void {
   if(r.wai) return instructionWait();
   if(r.stp) return instructionStop();
+  debugger.execute(r.pc.d);
   if(!status.interruptPending) return instruction();
 
   if(status.nmiPending) {

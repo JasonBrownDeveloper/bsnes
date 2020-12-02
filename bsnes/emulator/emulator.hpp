@@ -53,6 +53,27 @@ namespace Emulator {
   };
 }
 
+//debugging function hook:
+template<typename T> struct hook;
+template<typename R, typename... P> struct hook<auto (P...) -> R> {
+  function<auto (P...) -> R> callback;
+
+  auto operator()(P... p) const -> R {
+    if(callback) return callback(forward<P>(p)...);
+    return R();
+  }
+
+  hook() {}
+  hook(const hook& hook) { callback = hook.callback; }
+  hook(void* function) { callback = function; }
+  hook(auto (*function)(P...) -> R) { callback = function; }
+  template<typename C> hook(auto (C::*function)(P...) -> R, C* object) { callback = {function, object}; }
+  template<typename C> hook(auto (C::*function)(P...) const -> R, C* object) { callback = {function, object}; }
+  template<typename L> hook(const L& function) { callback = function; }
+
+  auto operator=(const hook& source) -> hook& { callback = source.callback; return *this; }
+};
+
 #include "platform.hpp"
 #include "interface.hpp"
 #include "game.hpp"

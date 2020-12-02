@@ -17,7 +17,10 @@ auto CPU::dmaRun() -> void {
   counter.dma += 8;
   step<8,0>();
   dmaEdge();
-  for(auto& channel : channels) channel.dmaRun();
+  for(auto& channel : channels)
+  for(status.channelN = 0; status.channelN < 8; status.channelN++) {
+    channels[status.channelN].dmaRun();
+  }
   status.irqLock = true;
 }
 
@@ -35,7 +38,9 @@ auto CPU::hdmaSetup() -> void {
 auto CPU::hdmaRun() -> void {
   counter.dma += 8;
   step<8,0>();
-  for(auto& channel : channels) channel.hdmaTransfer();
+  for(status.channelN = 0; status.channelN < 8; status.channelN++) {
+    channels[status.channelN].hdmaTransfer();
+  }
   for(auto& channel : channels) channel.hdmaAdvance();
   status.irqLock = true;
 }
@@ -102,6 +107,7 @@ auto CPU::Channel::transfer(uint24 addressA, uint2 index) -> void {
     auto data = readB(addressB, valid);
     writeA(addressA, data);
   }
+  cpu.debugger.dma(direction, addressB, addressA, cpu.r.mdr);
 }
 
 auto CPU::Channel::dmaRun() -> void {
@@ -110,7 +116,6 @@ auto CPU::Channel::dmaRun() -> void {
   step<8,0>();
   edge();
 
-  uint2 index = 0;
   do {
     transfer(sourceBank << 16 | sourceAddress, index++);
     if(!fixedTransfer) !reverseTransfer ? sourceAddress++ : sourceAddress--;
@@ -175,7 +180,7 @@ auto CPU::Channel::hdmaTransfer() -> void {
   if(!hdmaDoTransfer) return;
 
   static const uint lengths[8] = {1, 2, 2, 4, 4, 4, 2, 4};
-  for(uint2 index : range(lengths[transferMode])) {
+  for(index = 0; index < lengths[transferMode]; ++index) {
     uint24 address = !indirect ? sourceBank << 16 | hdmaAddress++ : indirectBank << 16 | indirectAddress++;
     transfer(address, index);
   }
@@ -186,4 +191,68 @@ auto CPU::Channel::hdmaAdvance() -> void {
   lineCounter--;
   hdmaDoTransfer = bool(lineCounter & 0x80);
   hdmaReload();
+}
+
+auto CPU::disassembleDma() -> string {
+  auto n = status.channelN;
+  uint addressA, addressB;
+
+  if(channels[n].dmaEnable) {
+    addressA = channels[n].sourceBank << 16 | channels[n].sourceAddress;
+    //if(!channels[n].fixedTransfer) !channels[n].reverseTransfer ? addressA-- : addressA++;
+    uint2 indexB = channels[n].index - 1;
+    uint8 addressB = channels[n].targetAddress;
+    switch(channels[n].transferMode) {
+    case 1: case 5: addressB += indexB.bit(0); break;
+    case 3: case 7: addressB += indexB.bit(1); break;
+    case 4: addressB += indexB; break;
+    }
+  } else {
+    addressA = !channels[n].indirect ? channels[n].sourceBank << 16 | channels[n].hdmaAddress - 1 : channels[n].indirectBank << 16 | channels[n].indirectAddress - 1;
+    uint2 indexB = channels[n].index;
+    uint8 addressB = channels[n].targetAddress;
+    switch(channels[n].transferMode) {
+    case 1: case 5: addressB += indexB.bit(0); break;
+    case 3: case 7: addressB += indexB.bit(1); break;
+    case 4: addressB += indexB; break;
+    }
+  }
+
+  return disassembleDma(n, channels[n].direction, addressB, addressA, r.mdr);
+}
+
+auto CPU::disassembleDma(uint n, bool direction, uint8 bbus, uint24 abus, uint8 data) -> string {
+  string s;
+
+  s = {"{0} {1}   {2} [{3}] {4} [{5}]", string_format{
+    channels[n].dmaEnable ? "d" : "h",
+    n,
+    hex(data,2),
+    bbus == 0x80 ? hex(0x7e0000 | wramAddress - 1, 6) : hex(0x2100 | bbus, 6),
+    direction ? "->" : "<-",
+    hex(abus,6)
+  }};
+
+  s.append(" A:{0} X:{1} Y:{2} S:{3} D:{4} B:{5} ", string_format{
+    hex(r.a.w, 4), hex(r.x.w, 4), hex(r.y.w, 4),
+    hex(r.s.w, 4), hex(r.d.w, 4), hex(r.b, 2)
+  });
+
+  if(r.e) {
+    s.append(
+      r.p.n ? 'N' : 'n', r.p.v ? 'V' : 'v',
+      r.p.m ? '1' : '0', r.p.x ? 'B' : 'b',
+      r.p.d ? 'D' : 'd', r.p.i ? 'I' : 'i',
+      r.p.z ? 'Z' : 'z', r.p.c ? 'C' : 'c'
+    );
+  } else {
+    s.append(
+      r.p.n ? 'N' : 'n', r.p.v ? 'V' : 'v',
+      r.p.m ? 'M' : 'm', r.p.x ? 'X' : 'x',
+      r.p.d ? 'D' : 'd', r.p.i ? 'I' : 'i',
+      r.p.z ? 'Z' : 'z', r.p.c ? 'C' : 'c'
+    );
+  }
+
+  return s;
 }

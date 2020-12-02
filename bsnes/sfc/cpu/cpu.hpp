@@ -23,6 +23,9 @@ struct CPU : Processor::WDC65816, Thread, PPUcounter {
   auto hdmaSetup() -> void;
   auto hdmaRun() -> void;
 
+  auto disassembleDma() -> string;
+  auto disassembleDma(uint channel, bool direction, uint8 bbus, uint24 abus, uint8 data) -> string;
+
   //memory.cpp
   auto idle() -> void override;
   auto read(uint addr) -> uint8 override;
@@ -76,6 +79,16 @@ struct CPU : Processor::WDC65816, Thread, PPUcounter {
     uint target = 0;
   } overclocking;
 
+  struct Debugger {
+    hook<auto (uint24) -> void> execute;
+    hook<auto (uint24, uint8) -> void> read;
+    hook<auto (uint24, uint8) -> void> write;
+    hook<auto (bool, uint8, uint24, uint8) -> void> dma;
+  } debugger;
+
+  //$2181-$2183
+  uint17 wramAddress = 0;
+
 private:
   uint version = 2;  //allowed: 1, 2
 
@@ -117,6 +130,7 @@ private:
     bool dmaPending = 0;
     bool hdmaPending = 0;
     bool hdmaMode = 0;  //0 = init, 1 = run
+    uint channelN;
 
     bool autoJoypadActive = 0;
     bool autoJoypadLatch = 0;
@@ -124,9 +138,6 @@ private:
   } status;
 
   struct IO {
-    //$2181-$2183
-    uint17 wramAddress = 0;
-
     //$4200
     boolean hirqEnable = 0;
     boolean virqEnable = 0;
@@ -234,6 +245,7 @@ private:
     //internal state
     uint1 hdmaCompleted = 0;
     uint1 hdmaDoTransfer = 0;
+    uint2 index = 0;
 
     maybe<Channel&> next;
 

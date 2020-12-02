@@ -10,7 +10,7 @@ auto CPU::readAPU(uint addr, uint8 data) -> uint8 {
 auto CPU::readCPU(uint addr, uint8 data) -> uint8 {
   switch(addr & 0xffff) {
   case 0x2180:  //WMDATA
-    return bus.read(0x7e0000 | io.wramAddress++, data);
+    return bus.read(0x7e0000 | wramAddress++, data);
 
   //todo: it is not known what happens when reading from this register during auto-joypad polling
   case 0x4016:  //JOYSER0
@@ -111,18 +111,18 @@ auto CPU::writeCPU(uint addr, uint8 data) -> void {
   switch(addr & 0xffff) {
 
   case 0x2180:  //WMDATA
-    return bus.write(0x7e0000 | io.wramAddress++, data);
+    return bus.write(0x7e0000 | wramAddress++, data);
 
   case 0x2181:  //WMADDL
-    io.wramAddress = io.wramAddress & 0x1ff00 | data << 0;
+    wramAddress = wramAddress & 0x1ff00 | data << 0;
     return;
 
   case 0x2182:  //WMADDM
-    io.wramAddress = io.wramAddress & 0x100ff | data << 8;
+    wramAddress = wramAddress & 0x100ff | data << 8;
     return;
 
   case 0x2183:  //WMADDH
-    io.wramAddress = io.wramAddress & 0x0ffff | (data & 1) << 16;
+    wramAddress = wramAddress & 0x0ffff | (data & 1) << 16;
     return;
 
   //todo: it is not known what happens when writing to this register during auto-joypad polling
